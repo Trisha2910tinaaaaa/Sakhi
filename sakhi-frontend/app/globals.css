@@ -1,0 +1,260 @@
+@import 'tailwindcss';
+@import 'tw-animate-css';
+
+@custom-variant dark (&:is(.dark *));
+
+:root {
+  /* Sakhi - Cozy Gen-Z Aesthetic Theme */
+  /* Warm cream, soft sage, muted lavender - like a cozy therapy room */
+  --background: oklch(0.95 0.015 85);
+  --foreground: oklch(0.30 0.02 60);
+  --card: oklch(0.97 0.012 80);
+  --card-foreground: oklch(0.30 0.02 60);
+  --popover: oklch(0.97 0.012 80);
+  --popover-foreground: oklch(0.30 0.02 60);
+  --primary: oklch(0.55 0.10 145);
+  --primary-foreground: oklch(0.98 0.005 80);
+  --secondary: oklch(0.90 0.025 145);
+  --secondary-foreground: oklch(0.35 0.05 145);
+  --muted: oklch(0.92 0.018 85);
+  --muted-foreground: oklch(0.50 0.02 60);
+  --accent: oklch(0.88 0.04 280);
+  --accent-foreground: oklch(0.35 0.04 280);
+  --destructive: oklch(0.55 0.18 25);
+  --destructive-foreground: oklch(0.98 0.005 80);
+  --border: oklch(0.88 0.02 85);
+  --input: oklch(0.93 0.015 85);
+  --ring: oklch(0.55 0.10 145);
+  --chart-1: oklch(0.55 0.10 145);
+  --chart-2: oklch(0.65 0.08 280);
+  --chart-3: oklch(0.70 0.08 50);
+  --chart-4: oklch(0.60 0.10 220);
+  --chart-5: oklch(0.58 0.12 350);
+  --radius: 1rem;
+  --sidebar: oklch(0.94 0.015 85);
+  --sidebar-foreground: oklch(0.30 0.02 60);
+  --sidebar-primary: oklch(0.55 0.10 145);
+  --sidebar-primary-foreground: oklch(0.98 0.005 80);
+  --sidebar-accent: oklch(0.90 0.025 145);
+  --sidebar-accent-foreground: oklch(0.35 0.05 145);
+  --sidebar-border: oklch(0.88 0.02 85);
+  --sidebar-ring: oklch(0.55 0.10 145);
+  
+  /* Custom cozy wellness colors */
+  --lavender: oklch(0.82 0.06 280);
+  --sage: oklch(0.75 0.08 145);
+  --soft-blue: oklch(0.78 0.06 220);
+  --warm-cream: oklch(0.95 0.025 75);
+  --gentle-rose: oklch(0.85 0.05 350);
+  --cozy-tan: oklch(0.88 0.04 70);
+  --moss: oklch(0.60 0.12 145);
+  --terracotta: oklch(0.65 0.10 50);
+}
+
+.dark {
+  --background: oklch(0.16 0.015 60);
+  --foreground: oklch(0.92 0.01 80);
+  --card: oklch(0.20 0.015 60);
+  --card-foreground: oklch(0.92 0.01 80);
+  --popover: oklch(0.20 0.015 60);
+  --popover-foreground: oklch(0.92 0.01 80);
+  --primary: oklch(0.70 0.10 145);
+  --primary-foreground: oklch(0.15 0.02 60);
+  --secondary: oklch(0.32 0.04 145);
+  --secondary-foreground: oklch(0.88 0.02 145);
+  --muted: oklch(0.25 0.015 60);
+  --muted-foreground: oklch(0.68 0.015 80);
+  --accent: oklch(0.40 0.06 280);
+  --accent-foreground: oklch(0.92 0.01 280);
+  --destructive: oklch(0.45 0.16 25);
+  --destructive-foreground: oklch(0.92 0.01 25);
+  --border: oklch(0.30 0.015 60);
+  --input: oklch(0.25 0.015 60);
+  --ring: oklch(0.70 0.10 145);
+  --chart-1: oklch(0.70 0.10 145);
+  --chart-2: oklch(0.65 0.08 280);
+  --chart-3: oklch(0.68 0.08 50);
+  --chart-4: oklch(0.62 0.10 220);
+  --chart-5: oklch(0.60 0.10 350);
+  --sidebar: oklch(0.18 0.015 60);
+  --sidebar-foreground: oklch(0.92 0.01 80);
+  --sidebar-primary: oklch(0.70 0.10 145);
+  --sidebar-primary-foreground: oklch(0.15 0.02 60);
+  --sidebar-accent: oklch(0.32 0.04 145);
+  --sidebar-accent-foreground: oklch(0.88 0.02 145);
+  --sidebar-border: oklch(0.30 0.015 60);
+  --sidebar-ring: oklch(0.70 0.10 145);
+  
+  /* Custom cozy wellness colors - dark mode */
+  --lavender: oklch(0.42 0.06 280);
+  --sage: oklch(0.40 0.08 145);
+  --soft-blue: oklch(0.42 0.06 220);
+  --warm-cream: oklch(0.28 0.02 75);
+  --gentle-rose: oklch(0.45 0.05 350);
+  --cozy-tan: oklch(0.35 0.03 70);
+  --moss: oklch(0.45 0.10 145);
+  --terracotta: oklch(0.45 0.08 50);
+}
+
+@theme inline {
+  --font-sans: 'Nunito', 'Geist', 'Geist Fallback', sans-serif;
+  --font-serif: 'Lora', serif;
+  --font-mono: 'Geist Mono', 'Geist Mono Fallback';
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --color-chart-1: var(--chart-1);
+  --color-chart-2: var(--chart-2);
+  --color-chart-3: var(--chart-3);
+  --color-chart-4: var(--chart-4);
+  --color-chart-5: var(--chart-5);
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --color-sidebar: var(--sidebar);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-lavender: var(--lavender);
+  --color-sage: var(--sage);
+  --color-soft-blue: var(--soft-blue);
+  --color-warm-cream: var(--warm-cream);
+  --color-gentle-rose: var(--gentle-rose);
+  --color-cozy-tan: var(--cozy-tan);
+  --color-moss: var(--moss);
+  --color-terracotta: var(--terracotta);
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* Custom animations for wellness app */
+@keyframes gentle-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes breathe-in {
+  0% { transform: scale(1); }
+  100% { transform: scale(1.3); }
+}
+
+@keyframes breathe-out {
+  0% { transform: scale(1.3); }
+  100% { transform: scale(1); }
+}
+
+@keyframes float {
+  0%, 100% { transform: translateY(0px); }
+  50% { transform: translateY(-8px); }
+}
+
+@keyframes float-slow {
+  0%, 100% { transform: translateY(0px) rotate(0deg); }
+  50% { transform: translateY(-6px) rotate(3deg); }
+}
+
+@keyframes sway {
+  0%, 100% { transform: rotate(-3deg); }
+  50% { transform: rotate(3deg); }
+}
+
+@keyframes sand-fall {
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
+}
+
+@keyframes glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(255, 200, 100, 0.2); }
+  50% { box-shadow: 0 0 30px rgba(255, 200, 100, 0.35); }
+}
+
+@keyframes twinkle {
+  0%, 100% { opacity: 0.4; }
+  50% { opacity: 1; }
+}
+
+@keyframes drift {
+  0% { transform: translateX(0) translateY(0); }
+  25% { transform: translateX(5px) translateY(-3px); }
+  50% { transform: translateX(0) translateY(-6px); }
+  75% { transform: translateX(-5px) translateY(-3px); }
+  100% { transform: translateX(0) translateY(0); }
+}
+
+@keyframes confetti {
+  0% { transform: translateY(0) rotate(0deg); opacity: 1; }
+  100% { transform: translateY(-100px) rotate(720deg); opacity: 0; }
+}
+
+.animate-gentle-pulse {
+  animation: gentle-pulse 2s ease-in-out infinite;
+}
+
+.animate-breathe-in {
+  animation: breathe-in 4s ease-in-out forwards;
+}
+
+.animate-breathe-out {
+  animation: breathe-out 8s ease-in-out forwards;
+}
+
+.animate-float {
+  animation: float 6s ease-in-out infinite;
+}
+
+.animate-float-slow {
+  animation: float-slow 8s ease-in-out infinite;
+}
+
+.animate-sway {
+  animation: sway 4s ease-in-out infinite;
+}
+
+.animate-glow {
+  animation: glow 3s ease-in-out infinite;
+}
+
+.animate-twinkle {
+  animation: twinkle 2s ease-in-out infinite;
+}
+
+.animate-drift {
+  animation: drift 10s ease-in-out infinite;
+}
+
+.animate-confetti {
+  animation: confetti 1s ease-out forwards;
+}
+
+/* Cozy paper texture overlay */
+.cozy-texture {
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)' opacity='0.03'/%3E%3C/svg%3E");
+}
