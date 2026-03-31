@@ -96,3 +96,9 @@ def crisis_resources() -> dict:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Unable to load crisis resources",
         ) from exc
+
+
+@router.options("/chat")
+async def options_chat():
+    """Handle CORS preflight requests"""
+    return {}
