@@ -1,7 +1,7 @@
 """AI therapist service for Sakhi.
 
 Implements:
-- Real Ollama Llama 3 integration (POST /api/generate)
+- Real Groq Llama 3 integration (free API)
 - Per-user conversation memory (last 5-10 messages)
 - Personalization via user's name (and "My name is ..." extraction)
 - Crisis detection before any model call
@@ -21,8 +21,10 @@ import httpx
 import crisis_detector
 
 
-OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/generate")
-OLLAMA_MODEL = os.getenv("OLLAMA_MODEL", "llama3:8b")
+# Groq API settings
+GROQ_API_KEY = os.getenv("GROQ_API_KEY", "")
+GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192")
 
 # Simple in-memory conversation memory.
 # Keyed by user_id (string). Works for single-process deployments.
@@ -41,7 +43,8 @@ SYSTEM_PROMPT = (
     "You sometimes validate, sometimes listen, sometimes ask questions, "
     "and sometimes suggest a small exercise. Vary your approach across turns. "
     "If the user appears to be in crisis, crisis resources will be handled separately. "
-    "When you know the user's name, greet them naturally using that name."
+    "When you know the user's name, greet them naturally using that name. "
+    "Use emojis occasionally to feel warm and human."
 )
 
 
@@ -71,10 +74,10 @@ def _extract_name(text: str) -> Optional[str]:
         return None
     t = str(text).strip()
     patterns = [
-        r"my name is\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
-        r"i'm\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
-        r"i am\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
-        r"call me\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
+        r"my name is\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
+        r"i'm\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
+        r"i am\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
+        r"call me\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
     ]
     for pat in patterns:
         m = re.search(pat, t, flags=re.IGNORECASE)
@@ -117,7 +120,7 @@ def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
 
     options = [
         {
-            "name": "4-7-8 breathing",
+            "name": "🌊 4-7-8 breathing",
             "description": "Inhale 4, hold 7, exhale 8 to help calm your nervous system.",
             "pattern": {
                 "inhale_seconds": 4,
@@ -131,7 +134,7 @@ def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
             },
         },
         {
-            "name": "Box breathing",
+            "name": "📦 Box breathing",
             "description": "Equal counts for inhale, hold, exhale, hold—steady and grounding.",
             "pattern": {
                 "inhale_seconds": 4,
@@ -146,7 +149,7 @@ def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
             },
         },
         {
-            "name": "Box breathing (5 rounds)",
+            "name": "🧘 Box breathing (5 rounds)",
             "description": "Take it slow: 4 in, 4 hold, 4 out, 4 hold. Repeat 5 times.",
             "pattern": {
                 "inhale_seconds": 4,
@@ -182,24 +185,30 @@ def _infer_suggested_exercise(message: str, is_crisis: bool) -> Optional[Dict[st
     return None
 
 
-def _call_ollama(prompt: str) -> str:
-    """Call Ollama /api/generate and return the raw model text."""
+def _call_groq(messages: List[Dict[str, str]]) -> str:
+    """Call Groq API and return the raw model text."""
+    if not GROQ_API_KEY:
+        raise ValueError("GROQ_API_KEY not set in environment variables")
+    
     payload = {
-        "model": OLLAMA_MODEL,
-        "prompt": prompt,
-        "stream": False,
-        "options": {
-            "temperature": 0.9,
-            "top_p": 0.95,
-            "repeat_penalty": 1.15,
-        },
+        "model": GROQ_MODEL,
+        "messages": messages,
+        "temperature": 0.9,
+        "max_tokens": 200,
+        "top_p": 0.95,
     }
-    timeout_seconds = 60
+    
+    timeout_seconds = 30
+    headers = {
+        "Authorization": f"Bearer {GROQ_API_KEY}",
+        "Content-Type": "application/json"
+    }
+    
     with httpx.Client(timeout=timeout_seconds) as client:
-        resp = client.post(OLLAMA_URL, json=payload)
+        resp = client.post(GROQ_URL, json=payload, headers=headers)
     resp.raise_for_status()
     data = resp.json()
-    return (data.get("response") or "").strip()
+    return (data["choices"][0]["message"]["content"] or "").strip()
 
 
 def get_therapeutic_response(
@@ -226,25 +235,33 @@ def get_therapeutic_response(
 
     display_name = _get_display_name(user_id, username)
     if display_name:
-        display_name_clause = f"Use {display_name} naturally when greeting or addressing them."
+        display_name_clause = f"The user's name is {display_name}. Use their name naturally when greeting them."
     else:
-        display_name_clause = "The user's name is unknown; ask gently what they'd like to be called."
+        display_name_clause = "The user's name is unknown. Ask gently what they'd like to be called."
 
     history = _get_memory(user_id)
     history_for_prompt = history[-9:]  # previous messages
 
-    prompt = (
-        f"{SYSTEM_PROMPT}\n"
-        f"{display_name_clause}\n"
-        f"\nConversation history:\n{_format_history(history_for_prompt) if history_for_prompt else '(new conversation)'}\n"
-        f"\nUSER: {text}\n"
-        f"\nSAKHI:"
-    )
+    # Build conversation context for the system message
+    context_text = _format_history(history_for_prompt) if history_for_prompt else "(New conversation)"
+    
+    # Create messages for Groq API
+    messages = [
+        {
+            "role": "system",
+            "content": f"{SYSTEM_PROMPT}\n\n{display_name_clause}"
+        },
+        {
+            "role": "user",
+            "content": f"Previous conversation:\n{context_text}\n\nCurrent message: {text}\n\nPlease respond warmly and helpfully."
+        }
+    ]
 
     try:
-        raw = _call_ollama(prompt)
+        raw = _call_groq(messages)
         response = _trim_response(raw)
-    except Exception:
+    except Exception as e:
+        print(f"Groq API error: {e}")
         # Warm non-mock fallback (still personalized when possible).
         if display_name and detected_name:
             response = (
@@ -264,7 +281,6 @@ def get_therapeutic_response(
         response = _trim_response(response)
 
     # If the user introduced their name, ensure the reply acknowledges it.
-    # (Ollama sometimes follows the instruction inconsistently; we enforce it.)
     if detected_name:
         if detected_name.lower() not in response.lower():
             response = f"Nice to meet you {detected_name}. {response}"
