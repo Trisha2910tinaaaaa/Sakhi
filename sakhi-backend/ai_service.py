@@ -13,6 +13,7 @@ from __future__ import annotations
 import os
 import random
 import re
+import json
 from typing import Any, Dict, List, Optional
 from uuid import UUID
 
@@ -27,25 +28,32 @@ GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
 GROQ_MODEL = os.getenv("GROQ_MODEL", "llama3-8b-8192")
 
 # Simple in-memory conversation memory.
-# Keyed by user_id (string). Works for single-process deployments.
 _MEMORY: Dict[str, List[Dict[str, str]]] = {}
-_MEMORY_NAMES: Dict[str, str] = {}  # last known display name extracted from messages
-_MEMORY_MAX_MESSAGES = 10  # store last 5 user + 5 assistant messages
+_MEMORY_NAMES: Dict[str, str] = {}
+_MEMORY_MAX_MESSAGES = 10
 
 
-SYSTEM_PROMPT = (
-    "You are Sakhi, a compassionate AI companion for mental wellness. "
-    "You are warm, gentle, non-judgmental, and you validate emotions first. "
-    "You NEVER diagnose or claim certainty about a mental health condition. "
-    "You ask kind, short follow-up questions when helpful. "
-    "If appropriate, you may suggest practical grounding or breathing exercises. "
-    "Keep responses 2-4 sentences usually and never exceed 150 words. "
-    "You sometimes validate, sometimes listen, sometimes ask questions, "
-    "and sometimes suggest a small exercise. Vary your approach across turns. "
-    "If the user appears to be in crisis, crisis resources will be handled separately. "
-    "When you know the user's name, greet them naturally using that name. "
-    "Use emojis occasionally to feel warm and human."
-)
+SYSTEM_PROMPT = """You are Sakhi, a compassionate AI companion for mental wellness.
+Your name means "female friend" in Sanskrit.
+
+Key traits:
+- Warm, gentle, non-judgmental
+- Validate emotions first before offering support
+- NEVER diagnose mental health conditions
+- Keep responses short (2-4 sentences, max 100 words)
+- Use emojis occasionally (💜, 🌸, 🌊, ✨)
+- Ask follow-up questions naturally
+- Vary your responses - don't repeat the same phrases
+- Remember the user's name and use it naturally
+- If the user seems anxious, suggest grounding techniques
+- Be conversational, not robotic
+
+Example responses:
+- "I hear you, [name]. That sounds really heavy. Would you like to share more? 💜"
+- "It makes sense you'd feel that way. Let's take a breath together. 🌊"
+- "Thank you for trusting me with this, [name]. You're not alone in this."
+
+Never give medical advice. Never say you're a therapist. Be a warm friend."""
 
 
 def _memory_key(user_id: Optional[UUID]) -> str:
@@ -69,24 +77,23 @@ def _get_display_name(user_id: Optional[UUID], username: Optional[str]) -> str:
 
 
 def _extract_name(text: str) -> Optional[str]:
-    """Best-effort extraction of user-provided names from chat messages."""
+    """Extract user-provided names from chat messages."""
     if not text:
         return None
     t = str(text).strip()
     patterns = [
         r"my name is\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
-        r"i'm\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
+        r"i['‘’]?m\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
         r"i am\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
         r"call me\s+(?P<name>[A-Za-z][A-Za-z\s\-']{0,40})",
     ]
     for pat in patterns:
         m = re.search(pat, t, flags=re.IGNORECASE)
-        if not m:
-            continue
-        name = m.group("name").strip()
-        name = re.sub(r"\s+", " ", name)
-        if 1 <= len(name) <= 40:
-            return name
+        if m:
+            name = m.group("name").strip()
+            name = re.sub(r"\s+", " ", name)
+            if 1 <= len(name) <= 40:
+                return name
     return None
 
 
@@ -95,14 +102,13 @@ def _format_history(history: List[Dict[str, str]]) -> str:
     for msg in history:
         role = (msg.get("role") or "").upper()
         content = (msg.get("content") or "").strip()
-        if not role or not content:
-            continue
-        lines.append(f"{role}: {content}")
+        if role and content:
+            lines.append(f"{role}: {content}")
     return "\n".join(lines)
 
 
 def _trim_response(text: str) -> str:
-    """Keep output short: 2-4 sentences and <=150 words."""
+    """Keep output short."""
     t = (text or "").strip()
     sentences = re.split(r"(?<=[.!?])\s+", t)
     sentences = [s.strip() for s in sentences if s.strip()]
@@ -115,13 +121,13 @@ def _trim_response(text: str) -> str:
 
 
 def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
-    """Return a breathing exercise with a visual number guide."""
+    """Return a breathing exercise."""
     m = (mood or "").lower() if mood else ""
 
     options = [
         {
             "name": "🌊 4-7-8 breathing",
-            "description": "Inhale 4, hold 7, exhale 8 to help calm your nervous system.",
+            "description": "Inhale 4, hold 7, exhale 8 to calm your nervous system.",
             "pattern": {
                 "inhale_seconds": 4,
                 "hold_after_inhale_seconds": 7,
@@ -129,13 +135,13 @@ def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
                 "cycles_recommended": 4,
             },
             "visual_guide": {
-                "pattern": [4, 7, 8, 4, 7, 8, 4, 7, 8, 4, 7, 8],
+                "pattern": [4, 7, 8] * 4,
                 "labels": ["inhale", "hold", "exhale"] * 4,
             },
         },
         {
             "name": "📦 Box breathing",
-            "description": "Equal counts for inhale, hold, exhale, hold—steady and grounding.",
+            "description": "Equal counts - steady and grounding.",
             "pattern": {
                 "inhale_seconds": 4,
                 "hold_after_inhale_seconds": 4,
@@ -148,26 +154,11 @@ def get_breathing_exercise(mood: Optional[str] = None) -> Dict[str, Any]:
                 "labels": ["inhale", "hold", "exhale", "hold"] * 4,
             },
         },
-        {
-            "name": "🧘 Box breathing (5 rounds)",
-            "description": "Take it slow: 4 in, 4 hold, 4 out, 4 hold. Repeat 5 times.",
-            "pattern": {
-                "inhale_seconds": 4,
-                "hold_after_inhale_seconds": 4,
-                "exhale_seconds": 4,
-                "hold_after_exhale_seconds": 4,
-                "cycles_recommended": 5,
-            },
-            "visual_guide": {
-                "pattern": [4, 4, 4, 4] * 5,
-                "labels": ["inhale", "hold", "exhale", "hold"] * 5,
-            },
-        },
     ]
 
     if m in {"anxious", "anxiety", "sad", "stressed", "stress"}:
-        return random.choice([options[0], options[1]])
-    return random.choice(options[1:])
+        return random.choice(options)
+    return options[1]
 
 
 def _infer_suggested_exercise(message: str, is_crisis: bool) -> Optional[Dict[str, Any]]:
@@ -175,40 +166,65 @@ def _infer_suggested_exercise(message: str, is_crisis: bool) -> Optional[Dict[st
         return get_breathing_exercise(mood="calm")
 
     lowered = (message or "").lower()
-    wants_breath = any(k in lowered for k in ["breath", "breathing", "inhale", "exhale", "calm down"])
-    anxious = any(k in lowered for k in ["anxious", "anxiety", "worried", "panic"])
-    sad = any(k in lowered for k in ["sad", "depressed", "hopeless", "down"])
-    stressed = any(k in lowered for k in ["stressed", "stress", "overwhelmed"])
-    if wants_breath or anxious or sad or stressed:
-        mood = "anxious" if anxious else "sad" if sad else "stressed" if stressed else None
-        return get_breathing_exercise(mood=mood)
+    if any(k in lowered for k in ["breath", "breathing", "inhale", "exhale", "calm down"]):
+        return get_breathing_exercise(mood="calm")
+    if any(k in lowered for k in ["anxious", "anxiety", "worried", "panic"]):
+        return get_breathing_exercise(mood="anxious")
+    if any(k in lowered for k in ["sad", "depressed", "hopeless", "down"]):
+        return get_breathing_exercise(mood="sad")
+    if any(k in lowered for k in ["stressed", "stress", "overwhelmed"]):
+        return get_breathing_exercise(mood="stressed")
     return None
 
 
 def _call_groq(messages: List[Dict[str, str]]) -> str:
     """Call Groq API and return the raw model text."""
     if not GROQ_API_KEY:
+        print("❌ GROQ_API_KEY not set in environment variables")
         raise ValueError("GROQ_API_KEY not set in environment variables")
     
     payload = {
         "model": GROQ_MODEL,
         "messages": messages,
-        "temperature": 0.9,
-        "max_tokens": 200,
+        "temperature": 0.85,
+        "max_tokens": 250,
         "top_p": 0.95,
+        "frequency_penalty": 0.5,
+        "presence_penalty": 0.5,
     }
     
-    timeout_seconds = 30
+    timeout_seconds = 45
     headers = {
         "Authorization": f"Bearer {GROQ_API_KEY}",
         "Content-Type": "application/json"
     }
     
-    with httpx.Client(timeout=timeout_seconds) as client:
-        resp = client.post(GROQ_URL, json=payload, headers=headers)
-    resp.raise_for_status()
-    data = resp.json()
-    return (data["choices"][0]["message"]["content"] or "").strip()
+    print(f"📤 Sending request to Groq with model: {GROQ_MODEL}")
+    
+    try:
+        with httpx.Client(timeout=timeout_seconds) as client:
+            resp = client.post(GROQ_URL, json=payload, headers=headers)
+        
+        print(f"📥 Groq response status: {resp.status_code}")
+        
+        if resp.status_code != 200:
+            print(f"❌ Groq error response: {resp.text}")
+            resp.raise_for_status()
+        
+        data = resp.json()
+        response_text = data["choices"][0]["message"]["content"].strip()
+        print(f"✅ Groq response received: {response_text[:100]}...")
+        return response_text
+        
+    except httpx.TimeoutException:
+        print("❌ Groq API timeout after 45 seconds")
+        raise
+    except httpx.HTTPStatusError as e:
+        print(f"❌ Groq HTTP error: {e.response.status_code} - {e.response.text}")
+        raise
+    except Exception as e:
+        print(f"❌ Groq API error: {e}")
+        raise
 
 
 def get_therapeutic_response(
@@ -232,63 +248,60 @@ def get_therapeutic_response(
     detected_name = _extract_name(text)
     if detected_name:
         _MEMORY_NAMES[key] = detected_name
+        print(f"📝 Extracted name: {detected_name}")
 
     display_name = _get_display_name(user_id, username)
-    if display_name:
-        display_name_clause = f"The user's name is {display_name}. Use their name naturally when greeting them."
-    else:
-        display_name_clause = "The user's name is unknown. Ask gently what they'd like to be called."
-
-    history = _get_memory(user_id)
-    history_for_prompt = history[-9:]  # previous messages
-
-    # Build conversation context for the system message
-    context_text = _format_history(history_for_prompt) if history_for_prompt else "(New conversation)"
     
-    # Create messages for Groq API
+    history = _get_memory(user_id)
+    
+    # Build conversation context
+    context_text = _format_history(history[-6:]) if history else "(New conversation)"
+    
+    # Create a single user message with all context (Groq works better with this format)
+    user_content = f"""{SYSTEM_PROMPT}
+
+User info: {"The user's name is " + display_name + ". Use their name naturally." if display_name else "The user hasn't shared their name yet. Ask gently if they'd like to share."}
+
+Previous conversation:
+{context_text}
+
+Current message from user: {text}
+
+Remember:
+- Be warm and conversational
+- Use the user's name if you know it
+- Keep response to 2-4 sentences
+- Be supportive but not robotic
+- If appropriate, suggest a breathing or grounding exercise
+
+Your response:"""
+
     messages = [
-        {
-            "role": "system",
-            "content": f"{SYSTEM_PROMPT}\n\n{display_name_clause}"
-        },
-        {
-            "role": "user",
-            "content": f"Previous conversation:\n{context_text}\n\nCurrent message: {text}\n\nPlease respond warmly and helpfully."
-        }
+        {"role": "system", "content": "You are Sakhi, a warm, compassionate AI companion."},
+        {"role": "user", "content": user_content}
     ]
 
     try:
         raw = _call_groq(messages)
         response = _trim_response(raw)
+        print(f"💬 Generated response: {response[:100]}...")
+        
     except Exception as e:
-        print(f"Groq API error: {e}")
-        # Warm non-mock fallback (still personalized when possible).
-        if display_name and detected_name:
-            response = (
-                f"Nice to meet you {detected_name}. I'm here with you. "
-                "Let's take one slow breath together, and then you can share what you're feeling."
-            )
-        elif display_name:
-            response = (
-                f"{display_name}, I'm here with you. Let's take one slow breath together, "
-                "and then you can share what feels most heavy right now."
-            )
+        print(f"❌ Groq API error: {e}")
+        # Fallback response - personalized if possible
+        if display_name:
+            response = f"{display_name}, I'm here with you. Tell me more about what's on your mind. 💜"
         else:
-            response = (
-                "I'm here with you. Let's take one slow breath together, "
-                "and then you can share what feels most heavy right now."
-            )
-        response = _trim_response(response)
+            response = "I'm here with you. Tell me more about what's on your mind. 💜"
 
-    # If the user introduced their name, ensure the reply acknowledges it.
-    if detected_name:
-        if detected_name.lower() not in response.lower():
-            response = f"Nice to meet you {detected_name}. {response}"
-            response = _trim_response(response)
+    # Ensure name is used if detected
+    if detected_name and detected_name.lower() not in response.lower():
+        response = f"Nice to meet you {detected_name}. {response}"
+        response = _trim_response(response)
 
     suggested_exercise = _infer_suggested_exercise(text, is_crisis=False)
 
-    # Update memory.
+    # Update memory
     history.append({"role": "user", "content": text})
     history.append({"role": "assistant", "content": response})
     _set_memory(user_id, history)
