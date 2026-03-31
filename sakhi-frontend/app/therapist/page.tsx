@@ -37,7 +37,7 @@ const quickActions = [
 const crisisKeywords = ["suicide", "kill myself", "end my life", "want to die", "self harm", "hurt myself"]
 
 // API URL - change this to your production URL later
-const API_URL = "http://127.0.0.1:8000"
+const API_URL = "https://sakhi-2wfh.onrender.com"
 
 // Greeting message (only mock left, everything else comes from backend)
 const greetingMessage = "Hello! I'm your compassionate AI companion. I'm here to listen, support, and walk alongside you on your wellness journey.\n\nRemember: while I'm here to help you process feelings and provide support, I'm not a replacement for professional mental health care. If you're in crisis, please reach out to emergency services.\n\nHow are you feeling today?"
