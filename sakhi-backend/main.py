@@ -56,8 +56,9 @@ app.add_middleware(
         "http://localhost:5173",
         "http://localhost:3000",
         "http://127.0.0.1:3000",
-        "https://sakhi.vercel.app",  # Production frontend
-        "https://*.onrender.com",     # Render backend domains
+      "https://sakhi-2wfh.onrender.com",
+        "https://sakhi-therapist.vercel.app",  # Add your Vercel URL when you have it
+        "https://*.vercel.app",       # Allow all Vercel preview deployments
     ],
     allow_credentials=True,
     allow_methods=["*"],
