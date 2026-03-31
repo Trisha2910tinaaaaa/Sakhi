@@ -10,6 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import affirmations, ai, auth, community, journal, therapists
 from database import Base, engine
+from schema_ensure import ensure_schema
 
 import models  # noqa: F401 — register ORM metadata with Base before create_all
 
@@ -27,6 +28,8 @@ async def lifespan(_app: FastAPI):
     """
     try:
         Base.metadata.create_all(bind=engine)
+        # Ensure Supabase already has required columns/tables.
+        ensure_schema()
     except Exception:
         logger.exception("Database initialization failed (check DATABASE_URL and connectivity)")
         raise
@@ -42,7 +45,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173"],
+    allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

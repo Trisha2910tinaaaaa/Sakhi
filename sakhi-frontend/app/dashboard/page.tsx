@@ -21,67 +21,81 @@ import {
 } from "@/components/cozy-aesthetics"
 import { cn } from "@/lib/utils"
 
-// Mock user data
-const userData = {
-  username: "HealingSoul_42",
-  currentMood: "calm",
-  joinedAt: new Date(Date.now() - 14 * 24 * 60 * 60 * 1000),
-}
-
-const recentJournalEntries = [
-  {
-    id: "1",
-    title: "A better day",
-    mood: "calm",
-    createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
-    preview: "Today felt lighter than yesterday. I managed to go for a short walk...",
-  },
-  {
-    id: "2",
-    title: "Struggling but trying",
-    mood: "sad",
-    createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
-    preview: "It's been hard to get out of bed lately...",
-  },
-]
-
-const savedAffirmations = [
-  "I am worthy of love and respect, exactly as I am.",
-  "My resilience is greater than any obstacle.",
-]
-
-const recentCommunityPosts = [
-  {
-    id: "1",
-    title: "My first week on Sakhi",
-    likes: 23,
-    comments: 5,
-    createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-  },
-]
-
-const moodHistory = [
-  { date: "Mon", mood: "anxious", value: 2 },
-  { date: "Tue", mood: "sad", value: 1 },
-  { date: "Wed", mood: "neutral", value: 3 },
-  { date: "Thu", mood: "calm", value: 4 },
-  { date: "Fri", mood: "calm", value: 4 },
-  { date: "Sat", mood: "happy", value: 5 },
-  { date: "Sun", mood: "calm", value: 4 },
-]
-
-const moodColors: Record<string, string> = {
-  happy: "bg-sage",
-  calm: "bg-soft-blue",
-  neutral: "bg-muted-foreground",
-  sad: "bg-lavender",
-  anxious: "bg-gentle-rose",
-  frustrated: "bg-destructive/50",
-  upset: "bg-destructive/30",
-  tired: "bg-muted",
-}
-
 export default function DashboardPage() {
+  const [userData, setUserData] = React.useState({
+    username: "Guest",
+    currentMood: "calm",
+    joinedAt: new Date(),
+  })
+  
+  // Load user data from localStorage
+  React.useEffect(() => {
+    const storedUsername = localStorage.getItem("username")
+    const storedMood = localStorage.getItem("mood_emoji")
+    
+    if (storedUsername) {
+      setUserData(prev => ({
+        ...prev,
+        username: storedUsername,
+        currentMood: storedMood || "calm",
+      }))
+    }
+  }, [])
+
+  // Mock data for dashboard display
+  const recentJournalEntries = [
+    {
+      id: "1",
+      title: "A better day",
+      mood: "calm",
+      createdAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+      preview: "Today felt lighter than yesterday. I managed to go for a short walk...",
+    },
+    {
+      id: "2",
+      title: "Struggling but trying",
+      mood: "sad",
+      createdAt: new Date(Date.now() - 3 * 24 * 60 * 60 * 1000),
+      preview: "It's been hard to get out of bed lately...",
+    },
+  ]
+
+  const savedAffirmations = [
+    "I am worthy of love and respect, exactly as I am.",
+    "My resilience is greater than any obstacle.",
+  ]
+
+  const recentCommunityPosts = [
+    {
+      id: "1",
+      title: "My first week on Sakhi",
+      likes: 23,
+      comments: 5,
+      createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    },
+  ]
+
+  const moodHistory = [
+    { date: "Mon", mood: "anxious", value: 2 },
+    { date: "Tue", mood: "sad", value: 1 },
+    { date: "Wed", mood: "neutral", value: 3 },
+    { date: "Thu", mood: "calm", value: 4 },
+    { date: "Fri", mood: "calm", value: 4 },
+    { date: "Sat", mood: "happy", value: 5 },
+    { date: "Sun", mood: "calm", value: 4 },
+  ]
+
+  const moodColors: Record<string, string> = {
+    happy: "bg-sage",
+    calm: "bg-soft-blue",
+    neutral: "bg-muted-foreground",
+    sad: "bg-lavender",
+    anxious: "bg-gentle-rose",
+    frustrated: "bg-destructive/50",
+    upset: "bg-destructive/30",
+    tired: "bg-muted",
+  }
+
   const formatDate = (date: Date) => {
     return new Intl.DateTimeFormat("en-US", {
       month: "short",

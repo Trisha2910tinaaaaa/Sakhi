@@ -1,16 +1,17 @@
-"""Therapist directory and booking lifecycle."""
+"""Therapists directory and booking endpoints."""
 
 from __future__ import annotations
 
 import logging
+from typing import List, Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session, joinedload
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from sqlalchemy.orm import Session
 
 from app.deps import get_current_user
 from database import get_db
-from models import Booking, BookingStatus, Therapist, User
+from models import Therapist, TherapistBooking, BookingStatus, User
 from schemas.therapist import (
     BookingCreate,
     BookingListResponse,
@@ -25,21 +26,19 @@ router = APIRouter(prefix="/therapists", tags=["therapists"])
 bookings_router = APIRouter(prefix="/bookings", tags=["bookings"])
 
 
-def _booking_to_response(booking: Booking) -> BookingResponse:
-    """Build a booking DTO including therapist profile."""
-    if booking.therapist is None:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Booking is missing therapist relation",
-        )
+def _therapist_response(t: Therapist) -> TherapistResponse:
+    return TherapistResponse.model_validate(t)
+
+
+def _booking_response(b: TherapistBooking) -> BookingResponse:
     return BookingResponse(
-        id=booking.id,
-        therapist_id=booking.therapist_id,
-        scheduled_at=booking.scheduled_at,
-        status=booking.status,
-        notes=booking.notes,
-        created_at=booking.created_at,
-        therapist=TherapistResponse.model_validate(booking.therapist),
+        id=b.id,
+        therapist_id=b.therapist_id,
+        session_date=b.session_date,
+        status=b.status.value if hasattr(b.status, "value") else str(b.status),
+        notes=b.notes,
+        created_at=b.created_at,
+        therapist=_therapist_response(b.therapist),
     )
 
 
@@ -47,14 +46,19 @@ def _booking_to_response(booking: Booking) -> BookingResponse:
 def list_therapists(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    verified: Optional[bool] = Query(default=True),
+    specialty: Optional[str] = Query(default=None, max_length=200),
 ) -> TherapistListResponse:
-    """List available therapists."""
-    _ = current_user
+    """List verified therapists with optional filters."""
+    _ = current_user  # reserved for future personalization
     try:
-        rows = db.query(Therapist).order_by(Therapist.name.asc()).all()
-        return TherapistListResponse(
-            therapists=[TherapistResponse.model_validate(t) for t in rows]
-        )
+        q = db.query(Therapist)
+        if verified is not None:
+            q = q.filter(Therapist.verified == verified)
+        if specialty:
+            q = q.filter(Therapist.specialty.ilike(f"%{specialty.strip()}%"))
+        rows: List[Therapist] = q.order_by(Therapist.created_at.desc()).all()
+        return TherapistListResponse(therapists=[_therapist_response(t) for t in rows])
     except Exception as exc:
         logger.exception("list_therapists failed")
         raise HTTPException(
@@ -69,13 +73,13 @@ def get_therapist(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> TherapistResponse:
-    """Return one therapist by id."""
+    """Get a single therapist by id."""
     _ = current_user
     try:
-        t = db.query(Therapist).filter(Therapist.id == therapist_id).first()
-        if t is None:
+        row = db.query(Therapist).filter(Therapist.id == therapist_id).first()
+        if row is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Therapist not found")
-        return TherapistResponse.model_validate(t)
+        return _therapist_response(row)
     except HTTPException:
         raise
     except Exception as exc:
@@ -93,30 +97,33 @@ def book_therapist(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> BookingResponse:
-    """Create a booking with a therapist."""
+    """Create a booking for the authenticated user."""
     try:
         t = db.query(Therapist).filter(Therapist.id == therapist_id).first()
         if t is None:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Therapist not found")
-        booking = Booking(
+
+        booking = TherapistBooking(
             user_id=current_user.id,
             therapist_id=therapist_id,
-            scheduled_at=body.scheduled_at,
+            session_date=body.session_date,
             notes=body.notes,
-            status=BookingStatus.pending,
+            status=BookingStatus.pending.value,
         )
         db.add(booking)
         db.commit()
         db.refresh(booking)
+
+        # Load therapist relation for response.
         booking = (
-            db.query(Booking)
-            .options(joinedload(Booking.therapist))
-            .filter(Booking.id == booking.id)
+            db.query(TherapistBooking)
+            .filter(TherapistBooking.id == booking.id)
             .first()
         )
-        if booking is None:
+        if booking is None or booking.therapist is None:
             raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Booking failed")
-        return _booking_to_response(booking)
+
+        return _booking_response(booking)
     except HTTPException:
         raise
     except Exception as exc:
@@ -135,16 +142,13 @@ def list_bookings(
 ) -> BookingListResponse:
     """List bookings for the authenticated user."""
     try:
-        rows = (
-            db.query(Booking)
-            .options(joinedload(Booking.therapist))
-            .filter(Booking.user_id == current_user.id)
-            .order_by(Booking.scheduled_at.desc())
+        rows: List[TherapistBooking] = (
+            db.query(TherapistBooking)
+            .filter(TherapistBooking.user_id == current_user.id)
+            .order_by(TherapistBooking.session_date.desc())
             .all()
         )
-        return BookingListResponse(bookings=[_booking_to_response(b) for b in rows])
-    except HTTPException:
-        raise
+        return BookingListResponse(bookings=[_booking_response(b) for b in rows])
     except Exception as exc:
         logger.exception("list_bookings failed")
         raise HTTPException(
@@ -152,34 +156,3 @@ def list_bookings(
             detail="Unable to load bookings",
         ) from exc
 
-
-@bookings_router.post("/{booking_id}/cancel", response_model=BookingResponse)
-def cancel_booking(
-    booking_id: UUID,
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-) -> BookingResponse:
-    """Mark a booking as cancelled if it belongs to the current user."""
-    try:
-        booking = (
-            db.query(Booking)
-            .options(joinedload(Booking.therapist))
-            .filter(Booking.id == booking_id, Booking.user_id == current_user.id)
-            .first()
-        )
-        if booking is None:
-            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Booking not found")
-        booking.status = BookingStatus.cancelled
-        db.add(booking)
-        db.commit()
-        db.refresh(booking)
-        return _booking_to_response(booking)
-    except HTTPException:
-        raise
-    except Exception as exc:
-        logger.exception("cancel_booking failed")
-        db.rollback()
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Unable to cancel booking",
-        ) from exc

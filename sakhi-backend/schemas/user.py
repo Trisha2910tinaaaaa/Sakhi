@@ -1,4 +1,4 @@
-"""User and authentication-related schemas."""
+"""User and authentication schemas."""
 
 from __future__ import annotations
 
@@ -10,38 +10,36 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class AnonymousSignIn(BaseModel):
-    """Optional client metadata for anonymous sign-in (reserved for future use)."""
+    """Anonymous sign-in request."""
 
-    client_label: Optional[str] = Field(default=None, max_length=120)
-
-
-class AddRecovery(BaseModel):
-    """Set or rotate a recovery password while authenticated."""
-
-    recovery_password: str = Field(..., min_length=8, max_length=256)
+    username: str = Field(..., min_length=3, max_length=40)
+    mood_emoji: Optional[str] = Field(default=None, max_length=32)
+    email: Optional[str] = Field(default=None, max_length=255)
 
 
-class RecoverAccount(BaseModel):
-    """Recover access using public username and recovery password."""
+class AddEmail(BaseModel):
+    """Add recovery email (optional)."""
 
-    username: str = Field(..., min_length=1, max_length=120)
-    recovery_password: str = Field(..., min_length=1, max_length=256)
+    email: str = Field(..., max_length=255)
 
 
 class UserResponse(BaseModel):
-    """Safe user projection for API consumers."""
+    """Authenticated user profile."""
 
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     username: str
-    has_recovery_password: bool
+    email_hash: Optional[str] = None
+    mood_emoji: Optional[str] = None
     created_at: datetime
+    last_active: Optional[datetime] = None
 
 
 class AuthTokenResponse(BaseModel):
-    """Bearer token issued after sign-in or recovery."""
+    """JWT token response."""
 
     access_token: str
     token_type: str = "bearer"
     user: UserResponse
+

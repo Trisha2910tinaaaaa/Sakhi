@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime
-from typing import List
+from typing import List, Optional
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
@@ -13,27 +13,33 @@ class PostCreate(BaseModel):
     """Create a new community post."""
 
     title: str = Field(..., min_length=1, max_length=255)
-    body: str = Field(..., min_length=1, max_length=20_000)
+    content: str = Field(..., min_length=1, max_length=20_000)
+    category: Optional[str] = Field(default=None, max_length=64)
 
 
 class PostResponse(BaseModel):
-    """Community post with lightweight author and engagement counts."""
+    """Community post returned by API."""
 
     model_config = ConfigDict(from_attributes=False)
 
     id: UUID
     title: str
-    body: str
+    content: str
+    category: str
     author_username: str
     created_at: datetime
-    upvote_count: int
+    upvotes: int
     comment_count: int
+
+    # Backward-compatible aliases
+    body: Optional[str] = None
+    upvote_count: Optional[int] = None
 
 
 class CommentCreate(BaseModel):
     """Create a comment on a post."""
 
-    body: str = Field(..., min_length=1, max_length=8000)
+    content: str = Field(..., min_length=1, max_length=8000)
 
 
 class CommentResponse(BaseModel):
@@ -42,18 +48,14 @@ class CommentResponse(BaseModel):
     model_config = ConfigDict(from_attributes=False)
 
     id: UUID
-    body: str
+    content: str
     author_username: str
     created_at: datetime
 
 
 class PostListResponse(BaseModel):
-    """List wrapper for posts."""
-
     posts: List[PostResponse]
 
 
 class CommentListResponse(BaseModel):
-    """List wrapper for comments."""
-
     comments: List[CommentResponse]

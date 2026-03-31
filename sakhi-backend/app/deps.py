@@ -8,6 +8,7 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from jose import JWTError
 from sqlalchemy.orm import Session
+from datetime import datetime, timezone
 
 import auth_service
 from database import get_db
@@ -32,7 +33,13 @@ def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
     try:
-        return auth_service.get_current_user(credentials.credentials, db)
+        user = auth_service.get_current_user(credentials.credentials, db)
+        # Keep last_active fresh for personalization and analytics.
+        user.last_active = datetime.now(timezone.utc)
+        db.add(user)
+        db.commit()
+        db.refresh(user)
+        return user
     except JWTError:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,

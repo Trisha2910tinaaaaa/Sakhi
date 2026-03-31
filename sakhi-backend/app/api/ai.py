@@ -1,4 +1,4 @@
-"""Mock AI therapeutic replies, breathing exercises, and crisis resources."""
+"""AI therapist endpoints (real Ollama + crisis detection + memory)."""
 
 from __future__ import annotations
 
@@ -29,13 +29,24 @@ def chat(
 
     Requires authentication so sessions can be attributed to a user id for auditing.
     """
-    _ = db_user  # reserved for future persistence / personalization
     try:
-        payload: Dict[str, Any] = ai_service.get_therapeutic_response(body.message, db_user.id)
+        # Validate optional user_id if caller included it.
+        if body.user_id is not None and body.user_id != db_user.id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="user_id does not match authenticated token",
+            )
+
+        payload: Dict[str, Any] = ai_service.get_therapeutic_response(
+            body.message,
+            user_id=db_user.id,
+            username=db_user.username,
+        )
         return ChatResponse(
             response=payload["response"],
             is_crisis=payload["is_crisis"],
-            suggested_exercise=payload["suggested_exercise"],
+            suggested_exercise=payload.get("suggested_exercise"),
+            crisis_resources=payload.get("crisis_resources"),
         )
     except Exception as exc:
         logger.exception("chat failed")
@@ -78,7 +89,7 @@ def crisis_resources() -> dict:
     Safe to call from marketing pages or logged-out flows.
     """
     try:
-        return {"resources": crisis_detector.get_crisis_resources()}
+        return crisis_detector.get_crisis_resources()
     except Exception as exc:
         logger.exception("crisis_resources failed")
         raise HTTPException(

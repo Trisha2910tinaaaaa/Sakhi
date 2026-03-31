@@ -8,8 +8,6 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from models import BookingStatus
-
 
 class TherapistResponse(BaseModel):
     """Public therapist profile."""
@@ -18,30 +16,31 @@ class TherapistResponse(BaseModel):
 
     id: UUID
     name: str
-    title: Optional[str]
-    specialty: Optional[str]
-    bio: Optional[str]
-    image_url: Optional[str]
+    title: Optional[str] = None
+    specialty: Optional[str] = None
+    bio: Optional[str] = None
+    image_url: Optional[str] = None
+    verified: bool = False
     created_at: datetime
 
 
 class BookingCreate(BaseModel):
-    """Request body when booking a therapist (therapist id may also come from path)."""
+    """Request body when booking a therapist."""
 
-    scheduled_at: datetime = Field(..., description="ISO-8601 datetime in UTC or with offset")
+    session_date: datetime = Field(..., description="ISO-8601 datetime in UTC or with offset")
     notes: Optional[str] = Field(default=None, max_length=4000)
 
 
 class BookingResponse(BaseModel):
     """Booking projection including therapist summary."""
 
-    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+    model_config = ConfigDict(from_attributes=True)
 
     id: UUID
     therapist_id: UUID
-    scheduled_at: datetime
-    status: BookingStatus
-    notes: Optional[str]
+    session_date: datetime
+    status: str
+    notes: Optional[str] = None
     created_at: datetime
     therapist: TherapistResponse
 

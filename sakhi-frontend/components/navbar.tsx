@@ -7,6 +7,7 @@ import { Menu, Heart, Moon, Sun, Leaf } from "lucide-react"
 import { useTheme } from "next-themes"
 import { Button } from "@/components/ui/button"
 import { Sheet, SheetContent, SheetTrigger } from "@/components/ui/sheet"
+import { UserProfile } from "@/components/user-profile"
 import { cn } from "@/lib/utils"
 
 const navigation = [
@@ -22,6 +23,13 @@ export function Navbar() {
   const pathname = usePathname()
   const { theme, setTheme } = useTheme()
   const [open, setOpen] = React.useState(false)
+  const [isAuthenticated, setIsAuthenticated] = React.useState(false)
+
+  // Check authentication status
+  React.useEffect(() => {
+    const token = localStorage.getItem("sakhi_token")
+    setIsAuthenticated(!!token)
+  }, [])
 
   return (
     <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-card/80 backdrop-blur-lg">
@@ -66,11 +74,16 @@ export function Navbar() {
             <span className="sr-only">Toggle theme</span>
           </Button>
 
-          <Link href="/signin" className="hidden md:block">
-            <Button variant="default" className="rounded-full px-5 shadow-sm shadow-primary/20">
-              Sign In
-            </Button>
-          </Link>
+          {/* Conditional: Profile or Sign In */}
+          {isAuthenticated ? (
+            <UserProfile />
+          ) : (
+            <Link href="/signin" className="hidden md:block">
+              <Button variant="default" className="rounded-full px-5 shadow-sm shadow-primary/20">
+                Sign In
+              </Button>
+            </Link>
+          )}
 
           {/* Mobile Menu */}
           <Sheet open={open} onOpenChange={setOpen}>
@@ -100,11 +113,19 @@ export function Navbar() {
                     {item.name}
                   </Link>
                 ))}
-                <Link href="/signin" onClick={() => setOpen(false)}>
-                  <Button variant="default" className="mt-4 w-full rounded-full shadow-sm shadow-primary/20">
-                    Sign In
-                  </Button>
-                </Link>
+                
+                {/* Mobile: Conditional Profile or Sign In */}
+                {isAuthenticated ? (
+                  <div className="pt-2">
+                    <UserProfile />
+                  </div>
+                ) : (
+                  <Link href="/signin" onClick={() => setOpen(false)}>
+                    <Button variant="default" className="mt-4 w-full rounded-full shadow-sm shadow-primary/20">
+                      Sign In
+                    </Button>
+                  </Link>
+                )}
               </div>
             </SheetContent>
           </Sheet>

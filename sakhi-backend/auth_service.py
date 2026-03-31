@@ -1,24 +1,22 @@
-"""JWT authentication, anonymous identity helpers, and recovery-password hashing."""
+"""JWT auth and recovery email hashing for Sakhi."""
 
 from __future__ import annotations
 
+import hashlib
 import os
 import random
 import re
 from datetime import datetime, timedelta, timezone
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 from uuid import UUID
 
 from dotenv import load_dotenv
 from jose import JWTError, jwt
-from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from models import User
 
 load_dotenv()
-
-_pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 JWT_SECRET = os.getenv("JWT_SECRET", "")
 JWT_ALGORITHM = "HS256"
@@ -55,57 +53,58 @@ _NOUNS = (
 )
 
 
-def create_jwt_token(user_id: UUID) -> str:
-    """
-    Issue a signed JWT for the given user id.
+def create_jwt_token(user: User) -> str:
+    """Create a signed JWT that includes required claims.
 
-    The subject claim carries the user id as a string; expiration is set from settings.
+    Required by spec:
+      - user_id
+      - username
+      - created_at
     """
     if not JWT_SECRET or not str(JWT_SECRET).strip():
         raise ValueError("JWT_SECRET must be set to create tokens")
+
+    created_at = user.created_at
+    if created_at is None:
+        created_at = datetime.now(timezone.utc)
+
     expire = datetime.now(timezone.utc) + timedelta(days=ACCESS_TOKEN_EXPIRE_DAYS)
-    payload = {"sub": str(user_id), "exp": expire}
+    payload = {
+        "user_id": str(user.id),
+        "username": user.username,
+        "created_at": created_at.isoformat(),
+        "exp": expire,
+    }
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
 def verify_jwt_token(token: str) -> Dict[str, Any]:
-    """
-    Validate a JWT and return its payload dictionary.
-
-    Raises JWTError if the token is missing, expired, or invalid.
-    """
+    """Validate a JWT and return decoded claims."""
     if not JWT_SECRET or not str(JWT_SECRET).strip():
         raise ValueError("JWT_SECRET must be set to verify tokens")
     return jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
 
 
 def get_current_user(token: str, db: Session) -> User:
-    """
-    Resolve a bearer token to a persisted User row.
-
-    Raises JWTError if the token is invalid or user id is missing.
-    Raises ValueError if the user no longer exists.
-    """
+    """Resolve current user from JWT claims."""
     payload = verify_jwt_token(token)
-    sub = payload.get("sub")
-    if not sub:
-        raise JWTError("Token missing subject")
+    user_id_raw = payload.get("user_id")
+    if not user_id_raw:
+        raise JWTError("Missing user_id in token")
+
     try:
-        uid = UUID(str(sub))
+        uid = UUID(str(user_id_raw))
     except ValueError as exc:
-        raise JWTError("Invalid subject in token") from exc
+        raise JWTError("Invalid user_id format in token") from exc
+
     user = db.query(User).filter(User.id == uid).first()
-    if user is None:
+    if not user:
         raise ValueError("User not found for token")
     return user
 
 
 def create_anonymous_username() -> str:
-    """
-    Generate a readable anonymous handle like 'Warrior_47' or 'Healing_Soul_92'.
-
-    Ensures only alphanumeric segments and underscores for URL-safe display.
-    """
+    """Generate a readable anonymous handle like 'Warrior_47'."""
     adj = random.choice(_ADJECTIVES)
     noun = random.choice(_NOUNS)
     suffix = random.randint(1, 99)
@@ -113,18 +112,10 @@ def create_anonymous_username() -> str:
     return re.sub(r"[^A-Za-z0-9_]+", "_", base)
 
 
-def hash_recovery_password(password: str) -> str:
-    """Hash a recovery password using bcrypt for secure offline verification."""
-    if not password or not str(password).strip():
-        raise ValueError("recovery password must not be empty")
-    return _pwd_context.hash(password)
+def hash_email(email: str) -> str:
+    """Hash an email address (sha256 hex) for recovery storage."""
+    if not email or not str(email).strip():
+        raise ValueError("email must not be empty")
+    normalized = str(email).strip().lower()
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
 
-
-def verify_recovery_password(plain: str, hashed: str) -> bool:
-    """Verify a recovery password against a bcrypt hash."""
-    if plain is None or hashed is None:
-        return False
-    try:
-        return _pwd_context.verify(plain, hashed)
-    except ValueError:
-        return False

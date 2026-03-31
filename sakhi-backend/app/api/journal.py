@@ -22,7 +22,8 @@ router = APIRouter(prefix="/journal", tags=["journal"])
 def _to_response(entry: JournalEntry) -> JournalEntryResponse:
     """Decrypt journal ciphertext for API responses."""
     try:
-        plain = encryption_service.decrypt_text(entry.encrypted_content)
+        encrypted_payload = entry.content_encrypted or entry.encrypted_content
+        plain = encryption_service.decrypt_text(encrypted_payload)
     except ValueError as exc:
         logger.exception("Journal decrypt failed for %s", entry.id)
         raise HTTPException(
@@ -33,6 +34,7 @@ def _to_response(entry: JournalEntry) -> JournalEntryResponse:
         id=entry.id,
         content=plain,
         content_hash=entry.content_hash,
+        mood_emoji=entry.mood_emoji,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
     )
@@ -72,10 +74,13 @@ def create_entry(
     try:
         content_hash = encryption_service.generate_content_hash(body.content)
         encrypted = encryption_service.encrypt_text(body.content)
+        mood_emoji = body.mood_emoji or current_user.mood_emoji
         entry = JournalEntry(
             user_id=current_user.id,
-            encrypted_content=encrypted,
+            encrypted_content=encrypted,  # legacy column
+            content_encrypted=encrypted,  # spec column
             content_hash=content_hash,
+            mood_emoji=mood_emoji,
         )
         db.add(entry)
         db.commit()

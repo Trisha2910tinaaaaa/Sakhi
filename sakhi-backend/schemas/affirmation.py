@@ -28,7 +28,18 @@ class SaveAffirmation(BaseModel):
     note: Optional[str] = Field(default=None, max_length=500)
 
 
+class SavedAffirmationResponse(BaseModel):
+    """An affirmation saved by the user (includes saved_at)."""
+
+    model_config = ConfigDict(from_attributes=False, use_enum_values=True)
+
+    id: UUID
+    text: str
+    category: AffirmationCategory
+    saved_at: datetime
+
+
 class SavedAffirmationList(BaseModel):
     """Saved affirmations for the current user."""
 
-    affirmations: List[AffirmationResponse]
+    affirmations: List[SavedAffirmationResponse]

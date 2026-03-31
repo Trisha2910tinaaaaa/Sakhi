@@ -6,14 +6,19 @@ import logging
 from typing import Optional
 from uuid import UUID
 
-from fastapi import APIRouter, Body, Depends, HTTPException, status
+from fastapi import APIRouter, Body, Depends, HTTPException, status, Query
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.deps import get_current_user
 from database import get_db
-from models import Affirmation, SavedAffirmation, User
-from schemas.affirmation import AffirmationResponse, SaveAffirmation, SavedAffirmationList
+from models import Affirmation, AffirmationCategory, SavedAffirmation, User
+from schemas.affirmation import (
+    AffirmationResponse,
+    SaveAffirmation,
+    SavedAffirmationList,
+    SavedAffirmationResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -24,11 +29,20 @@ router = APIRouter(prefix="/affirmations", tags=["affirmations"])
 def random_affirmation(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
+    category: Optional[str] = Query(default=None, max_length=64),
 ) -> AffirmationResponse:
     """Return a random affirmation from the catalog."""
     _ = current_user
     try:
-        row = db.query(Affirmation).order_by(func.random()).first()
+        q = db.query(Affirmation)
+        if category:
+            norm = category.strip().lower().replace("-", "_")
+            try:
+                q = q.filter(Affirmation.category == AffirmationCategory(norm))
+            except Exception:
+                # If the client passed an unknown category, treat as no filter.
+                pass
+        row = q.order_by(func.random()).first()
         if row is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
@@ -53,12 +67,21 @@ def list_saved(
     """List affirmations the user has saved."""
     try:
         q = (
-            db.query(Affirmation)
+            db.query(Affirmation, SavedAffirmation.saved_at)
             .join(SavedAffirmation, SavedAffirmation.affirmation_id == Affirmation.id)
             .filter(SavedAffirmation.user_id == current_user.id)
             .order_by(SavedAffirmation.saved_at.desc())
         )
-        items = [AffirmationResponse.model_validate(r) for r in q.all()]
+        rows = q.all()
+        items = [
+            SavedAffirmationResponse(
+                id=aff.id,
+                text=aff.text,
+                category=aff.category,
+                saved_at=saved_at,
+            )
+            for aff, saved_at in rows
+        ]
         return SavedAffirmationList(affirmations=items)
     except Exception as exc:
         logger.exception("list_saved failed")

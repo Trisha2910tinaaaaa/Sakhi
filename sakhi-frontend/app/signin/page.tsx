@@ -21,6 +21,9 @@ import {
   DiffuserDecor
 } from "@/components/cozy-aesthetics"
 
+// API URL - change this to your production URL later
+const API_URL = "http://127.0.0.1:8000"
+
 export default function SignInPage() {
   const router = useRouter()
   const [step, setStep] = React.useState<"username" | "mood" | "email">("username")
@@ -29,11 +32,13 @@ export default function SignInPage() {
   const [email, setEmail] = React.useState("")
   const [showDisclaimer, setShowDisclaimer] = React.useState(false)
   const [isLoading, setIsLoading] = React.useState(false)
+  const [error, setError] = React.useState("")
 
   const handleUsernameSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     if (username.trim().length >= 3) {
       setStep("mood")
+      setError("")
     }
   }
 
@@ -54,18 +59,94 @@ export default function SignInPage() {
 
   const handleComplete = async (skipEmail: boolean = false) => {
     setIsLoading(true)
-    // Simulate saving user data
-    await new Promise((resolve) => setTimeout(resolve, 1000))
+    setError("")
     
-    // In a real app, this would save to a database
-    localStorage.setItem("sakhi_user", JSON.stringify({
-      username,
-      mood,
-      email: skipEmail ? null : email,
-      createdAt: new Date().toISOString(),
-    }))
-    
-    router.push("/dashboard")
+    try {
+      // Call backend to create user/sign in
+      const response = await fetch(`${API_URL}/api/auth/signin`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          username: username.trim(),
+          mood_emoji: mood,
+        }),
+      })
+      
+      if (!response.ok) {
+        const errorData = await response.json()
+        throw new Error(errorData.detail || "Sign in failed")
+      }
+      
+      const data = await response.json()
+      
+      // Store token and user info in localStorage
+      localStorage.setItem("sakhi_token", data.access_token)
+      localStorage.setItem("user_id", data.user.id)
+      localStorage.setItem("username", data.user.username)
+      localStorage.setItem("mood_emoji", mood)
+      
+      // Store additional user data for persistence
+      const existingJoinDate = localStorage.getItem("join_date")
+      if (!existingJoinDate) {
+        localStorage.setItem("join_date", new Date().toISOString())
+      }
+      
+      // Increment session count
+      const currentSessionCount = parseInt(localStorage.getItem("session_count") || "0")
+      localStorage.setItem("session_count", (currentSessionCount + 1).toString())
+      
+      // If user provided email and didn't skip, add it to their account
+      if (!skipEmail && email && email.trim()) {
+        try {
+          const emailResponse = await fetch(`${API_URL}/api/auth/add-email`, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              "Authorization": `Bearer ${data.access_token}`,
+            },
+            body: JSON.stringify({ 
+              email: email.trim(),
+              password: "temp-recovery-password" // This will be set during proper recovery setup
+            }),
+          })
+          
+          if (emailResponse.ok) {
+            localStorage.setItem("user_email", email.trim())
+          }
+        } catch (emailError) {
+          console.error("Failed to add email:", emailError)
+          // Don't fail the signup if email addition fails
+        }
+      }
+      
+      // Redirect to dashboard
+      router.push("/dashboard")
+      
+    } catch (err) {
+      console.error("Sign-in error:", err)
+      setError(err instanceof Error ? err.message : "Failed to sign in. Please try again.")
+      
+      // Fallback: create local user if backend is unreachable
+      // This ensures the app still works during development
+      localStorage.setItem("sakhi_user", JSON.stringify({
+        username,
+        mood,
+        email: skipEmail ? null : email,
+        createdAt: new Date().toISOString(),
+      }))
+      
+      // Also create a mock token for local use
+      localStorage.setItem("sakhi_token", "mock-token-for-development")
+      localStorage.setItem("user_id", `local-${Date.now()}`)
+      localStorage.setItem("username", username)
+      
+      // Still redirect to dashboard
+      router.push("/dashboard")
+    } finally {
+      setIsLoading(false)
+    }
   }
 
   return (
@@ -75,8 +156,7 @@ export default function SignInPage() {
       
       {/* Cozy decorations */}
       <PlantDecor className="absolute top-32 left-8 w-16 h-24 opacity-50 animate-sway hidden lg:block" />
-      <PlantDecor className="absolute top-48 right-12 w-14 h-20 opacity-40 animate-sway hidden lg:block" style={{ animationDelay: "1s" }} />
-      <CandleDecor className="absolute top-40 left-28 w-10 h-16 opacity-40 hidden xl:block" />
+      <PlantDecor className="absolute top-48 right-12 w-14 h-20 opacity-40 animate-sway hidden lg:block" />
       <DiffuserDecor className="absolute top-36 right-32 w-12 h-18 opacity-40 hidden xl:block" />
       <BlanketDecor className="absolute bottom-32 left-8 w-24 h-14 opacity-30 hidden lg:block" />
       <BlanketDecor className="absolute bottom-40 right-12 w-20 h-12 opacity-25 hidden lg:block" />
@@ -127,6 +207,7 @@ export default function SignInPage() {
                       className="rounded-xl bg-warm-cream/50 dark:bg-muted/50 border-border/40"
                       minLength={3}
                       maxLength={20}
+                      autoFocus
                     />
                     <p className="text-xs text-muted-foreground">
                       3-20 characters. This will be your identity in the community.
@@ -207,6 +288,12 @@ export default function SignInPage() {
                 </CardDescription>
               </CardHeader>
               <CardContent className="space-y-6">
+                {error && (
+                  <div className="rounded-lg bg-destructive/15 p-3 text-sm text-destructive text-center">
+                    {error}
+                  </div>
+                )}
+                
                 <div className="space-y-2">
                   <Label htmlFor="email">Recovery Email (Optional)</Label>
                   <Input

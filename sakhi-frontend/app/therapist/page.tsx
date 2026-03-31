@@ -36,20 +36,18 @@ const quickActions = [
 
 const crisisKeywords = ["suicide", "kill myself", "end my life", "want to die", "self harm", "hurt myself"]
 
-const aiResponses: Record<string, string> = {
-  default: "I'm here to listen and support you. Whatever you're feeling right now is valid. Take a moment to breathe, and when you're ready, share what's on your mind. There's no rush, and no judgment here.",
-  grounding: "Let's try a grounding exercise together. Look around and name:\n\n• 5 things you can see\n• 4 things you can touch\n• 3 things you can hear\n• 2 things you can smell\n• 1 thing you can taste\n\nTake your time with each one. This helps bring you back to the present moment.",
-  anxious: "I hear that you're feeling anxious. That feeling is real, and it's okay to feel this way. Anxiety often lives in our thoughts about the future. Let's try to come back to this present moment together.\n\nWould you like to try a breathing exercise, or would you prefer to talk about what's causing these feelings?",
-  talk: "I'm here, and I'm listening. You can share as much or as little as you'd like. Sometimes just putting thoughts into words can help us understand them better.\n\nWhat's been on your mind?",
-  greeting: "Hello! I'm your compassionate AI companion. I'm here to listen, support, and walk alongside you on your wellness journey.\n\nRemember: while I'm here to help you process feelings and provide support, I'm not a replacement for professional mental health care. If you're in crisis, please reach out to emergency services.\n\nHow are you feeling today?",
-}
+// API URL - change this to your production URL later
+const API_URL = "http://127.0.0.1:8000"
+
+// Greeting message (only mock left, everything else comes from backend)
+const greetingMessage = "Hello! I'm your compassionate AI companion. I'm here to listen, support, and walk alongside you on your wellness journey.\n\nRemember: while I'm here to help you process feelings and provide support, I'm not a replacement for professional mental health care. If you're in crisis, please reach out to emergency services.\n\nHow are you feeling today?"
 
 export default function TherapistPage() {
   const [messages, setMessages] = React.useState<Message[]>([
     {
       id: "1",
       role: "assistant",
-      content: aiResponses.greeting,
+      content: greetingMessage,
       timestamp: new Date(),
     },
   ])
@@ -57,7 +55,31 @@ export default function TherapistPage() {
   const [isTyping, setIsTyping] = React.useState(false)
   const [showCrisisAlert, setShowCrisisAlert] = React.useState(false)
   const [showBreathingGuide, setShowBreathingGuide] = React.useState(false)
+  const [isAuthenticating, setIsAuthenticating] = React.useState(true)
   const scrollAreaRef = React.useRef<HTMLDivElement>(null)
+
+  // Get user data from localStorage (set during signin)
+  const [userId, setUserId] = React.useState<string | null>(null)
+  const [username, setUsername] = React.useState<string | null>(null)
+  const [token, setToken] = React.useState<string | null>(null)
+
+  // Load user data on component mount
+  React.useEffect(() => {
+    const storedToken = localStorage.getItem("sakhi_token")
+    const storedUserId = localStorage.getItem("user_id")
+    const storedUsername = localStorage.getItem("username")
+    
+    if (storedToken) setToken(storedToken)
+    if (storedUserId) setUserId(storedUserId)
+    if (storedUsername) setUsername(storedUsername)
+    
+    // Redirect to signin if no token exists
+    if (!storedToken) {
+      window.location.href = "/signin"
+    } else {
+      setIsAuthenticating(false)
+    }
+  }, [])
 
   const scrollToBottom = () => {
     if (scrollAreaRef.current) {
@@ -74,31 +96,58 @@ export default function TherapistPage() {
     return crisisKeywords.some((keyword) => lowerText.includes(keyword))
   }
 
-  const getAIResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase()
-    
-    if (lowerMessage.includes("breath") || lowerMessage.includes("breathing")) {
-      return "Taking deep breaths can really help calm our nervous system. Would you like me to guide you through a 4-7-8 breathing exercise? It's a simple but powerful technique.\n\nClick the 'Help me breathe' button below to start the guided exercise."
+  // NEW: Call backend API instead of using mock responses
+  const getAIResponseFromBackend = async (userMessage: string): Promise<string> => {
+    try {
+      const response = await fetch(`${API_URL}/api/ai/chat`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Authorization": `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          message: userMessage,
+          user_id: userId,
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        console.error("API Error:", errorData)
+        
+        // Handle authentication errors specifically
+        if (response.status === 401) {
+          console.log("Token expired or invalid, redirecting to signin...")
+          localStorage.removeItem("sakhi_token")
+          localStorage.removeItem("user_id") 
+          localStorage.removeItem("username")
+          window.location.href = "/signin"
+          return "Please sign in to continue chatting."
+        }
+        
+        throw new Error(`API error: ${response.status} - ${errorData.detail || 'Unknown error'}`)
+      }
+
+      const data = await response.json()
+      
+      // Check if this is a crisis response
+      if (data.is_crisis && data.crisis_resources) {
+        setShowCrisisAlert(true)
+      }
+      
+      // If there's a suggested breathing exercise, we could trigger it here
+      if (data.suggested_exercise) {
+        // Optional: auto-show breathing guide for certain responses
+        // setShowBreathingGuide(true)
+      }
+      
+      return data.response
+      
+    } catch (error) {
+      console.error("Error calling AI backend:", error)
+      // Fallback message if backend is unreachable
+      return "I'm here with you. Tell me more about what you're feeling. 💜"
     }
-    
-    if (lowerMessage.includes("ground") || lowerMessage.includes("present")) {
-      return aiResponses.grounding
-    }
-    
-    if (lowerMessage.includes("anxious") || lowerMessage.includes("anxiety") || lowerMessage.includes("worried")) {
-      return aiResponses.anxious
-    }
-    
-    if (lowerMessage.includes("sad") || lowerMessage.includes("depressed") || lowerMessage.includes("hopeless")) {
-      return "It takes courage to acknowledge these feelings. Sadness and low moods are part of being human, though I know they can feel overwhelming.\n\nYou don't have to face this alone. I'm here with you right now. Would you like to share more about what's been weighing on you?"
-    }
-    
-    if (lowerMessage.includes("thank")) {
-      return "You're very welcome. Remember, reaching out is a sign of strength. I'm here whenever you need to talk. Is there anything else on your mind?"
-    }
-    
-    // Default supportive response
-    return "Thank you for sharing that with me. Your feelings are valid, and I appreciate you trusting me with them.\n\nCan you tell me more about what's been on your mind? Sometimes exploring our thoughts out loud can help us understand them better."
   }
 
   const handleSend = async () => {
@@ -112,41 +161,77 @@ export default function TherapistPage() {
     }
 
     setMessages((prev) => [...prev, userMessage])
+    const userInput = input.trim()
     setInput("")
 
     // Check for crisis keywords
-    if (checkForCrisis(userMessage.content)) {
+    if (checkForCrisis(userInput)) {
       setShowCrisisAlert(true)
     }
 
-    // Simulate AI typing
+    // Show typing indicator
     setIsTyping(true)
-    await new Promise((resolve) => setTimeout(resolve, 1500))
+    
+    // Call backend API
+    const aiResponseContent = await getAIResponseFromBackend(userInput)
 
-    const aiResponse: Message = {
+    const aiMessage: Message = {
       id: (Date.now() + 1).toString(),
       role: "assistant",
-      content: getAIResponse(userMessage.content),
+      content: aiResponseContent,
       timestamp: new Date(),
     }
 
     setIsTyping(false)
-    setMessages((prev) => [...prev, aiResponse])
+    setMessages((prev) => [...prev, aiMessage])
   }
 
-  const handleQuickAction = (action: string) => {
+  const handleQuickAction = async (action: string) => {
     if (action === "breathing") {
       setShowBreathingGuide(true)
-    } else {
-      const response = aiResponses[action] || aiResponses.default
-      const aiMessage: Message = {
-        id: Date.now().toString(),
-        role: "assistant",
-        content: response,
-        timestamp: new Date(),
-      }
-      setMessages((prev) => [...prev, aiMessage])
+      return
     }
+    
+    // Map quick actions to natural language messages
+    let quickMessage = ""
+    switch (action) {
+      case "grounding":
+        quickMessage = "I need grounding exercises. Can you help me feel more present?"
+        break
+      case "anxious":
+        quickMessage = "I'm feeling anxious right now and need support."
+        break
+      case "talk":
+        quickMessage = "I need someone to talk to. Can you listen?"
+        break
+      default:
+        quickMessage = "I need some support right now."
+    }
+    
+    // Add user message to chat
+    const userMessage: Message = {
+      id: Date.now().toString(),
+      role: "user",
+      content: quickMessage,
+      timestamp: new Date(),
+    }
+    setMessages((prev) => [...prev, userMessage])
+    
+    // Show typing indicator
+    setIsTyping(true)
+    
+    // Get AI response
+    const aiResponseContent = await getAIResponseFromBackend(quickMessage)
+    
+    const aiMessage: Message = {
+      id: (Date.now() + 1).toString(),
+      role: "assistant",
+      content: aiResponseContent,
+      timestamp: new Date(),
+    }
+    
+    setIsTyping(false)
+    setMessages((prev) => [...prev, aiMessage])
   }
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
@@ -160,7 +245,15 @@ export default function TherapistPage() {
     <div className="flex min-h-screen flex-col cozy-texture">
       <Navbar />
 
-      <main className="container mx-auto flex flex-1 flex-col gap-4 p-4 md:p-6 relative">
+      {isAuthenticating ? (
+        <main className="flex flex-1 items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Verifying your session...</p>
+          </div>
+        </main>
+      ) : (
+        <main className="container mx-auto flex flex-1 flex-col gap-4 p-4 md:p-6 relative">
         {/* Cozy decorations */}
         <PlantDecor className="absolute top-4 left-4 w-12 h-16 opacity-40 animate-sway hidden lg:block" />
         <CandleDecor className="absolute top-8 right-4 w-8 h-14 opacity-40 hidden lg:block" />
@@ -289,7 +382,8 @@ export default function TherapistPage() {
             </div>
           </CardContent>
         </Card>
-      </main>
+        </main>
+      )}
 
       <Footer />
 
