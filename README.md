@@ -3,7 +3,7 @@
 **Sakhi** (meaning "female friend" in Sanskrit) is a compassionate AI-powered mental wellness platform offering anonymous support, therapeutic conversations, and community connection.
 
 ## Live Demo
-- **Frontend:** https://sakhi.vercel.app
+- **Frontend:** https://sakhi-therapist.vercel.app
 - **Backend API:** https://sakhi-2wfh.onrender.com
 - **API Docs:** https://sakhi-2wfh.onrender.com/docs
 
